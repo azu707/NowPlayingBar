@@ -134,7 +134,7 @@ final class NowPlayingPopoverViewController: NSViewController {
             stateLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
             previousButton.widthAnchor.constraint(equalToConstant: 42),
             previousButton.heightAnchor.constraint(equalToConstant: 32),
-            playPauseButton.widthAnchor.constraint(equalToConstant: 42),
+            playPauseButton.widthAnchor.constraint(equalToConstant: 64),
             playPauseButton.heightAnchor.constraint(equalToConstant: 32),
             nextButton.widthAnchor.constraint(equalToConstant: 42),
             nextButton.heightAnchor.constraint(equalToConstant: 32),
