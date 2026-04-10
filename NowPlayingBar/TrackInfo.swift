@@ -33,6 +33,8 @@ struct TrackInfo: Equatable {
     var artist: String
     var album: String
     var artworkData: Data?
+    var elapsedTime: TimeInterval?
+    var duration: TimeInterval?
     var message: String?
 
     static let idle = TrackInfo(
@@ -42,6 +44,8 @@ struct TrackInfo: Equatable {
         artist: "",
         album: "",
         artworkData: nil,
+        elapsedTime: nil,
+        duration: nil,
         message: "Open Music and start playback."
     )
 
@@ -84,5 +88,37 @@ struct TrackInfo: Equatable {
 
         return "\(artist)\n\(album)"
     }
-}
 
+    var remainingTime: TimeInterval? {
+        guard let elapsedTime, let duration else {
+            return nil
+        }
+
+        return max(duration - elapsedTime, 0)
+    }
+
+    var timeDisplay: String {
+        guard let elapsedTime, let remainingTime else {
+            return ""
+        }
+
+        return "\(Self.formatTime(elapsedTime)) / -\(Self.formatTime(remainingTime))"
+    }
+
+    var canControlPlayback: Bool {
+        switch playbackState {
+        case .playing, .paused, .stopped:
+            return true
+        case .notRunning, .permissionDenied, .error:
+            return false
+        }
+    }
+
+    private static func formatTime(_ timeInterval: TimeInterval) -> String {
+        let seconds = max(Int(timeInterval.rounded(.down)), 0)
+        let minutes = seconds / 60
+        let remainingSeconds = seconds % 60
+
+        return "\(minutes):\(String(format: "%02d", remainingSeconds))"
+    }
+}

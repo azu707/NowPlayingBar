@@ -32,6 +32,21 @@ final class MusicNowPlayingProvider {
         return trackInfo(from: descriptor)
     }
 
+    @discardableResult
+    func togglePlayPause() -> Bool {
+        executeMusicCommand("playpause")
+    }
+
+    @discardableResult
+    func nextTrack() -> Bool {
+        executeMusicCommand("next track")
+    }
+
+    @discardableResult
+    func previousTrack() -> Bool {
+        executeMusicCommand("previous track")
+    }
+
     private var isMusicRunning: Bool {
         !NSRunningApplication.runningApplications(withBundleIdentifier: musicBundleIdentifier).isEmpty
     }
@@ -43,7 +58,9 @@ final class MusicNowPlayingProvider {
         let artist = descriptor.string(at: 4)
         let album = descriptor.string(at: 5)
         let artworkData = descriptor.data(at: 6)
-        let message = descriptor.string(at: 7)
+        let elapsedTime = descriptor.optionalDouble(at: 7)
+        let duration = descriptor.optionalDouble(at: 8)
+        let message = descriptor.string(at: 9)
         let state = PlaybackState(rawValue: stateText) ?? .error
 
         return TrackInfo(
@@ -53,6 +70,8 @@ final class MusicNowPlayingProvider {
             artist: artist,
             album: album,
             artworkData: artworkData,
+            elapsedTime: elapsedTime,
+            duration: duration,
             message: message.isEmpty ? nil : message
         )
     }
@@ -69,6 +88,8 @@ final class MusicNowPlayingProvider {
                 artist: "",
                 album: "",
                 artworkData: nil,
+                elapsedTime: nil,
+                duration: nil,
                 message: "Allow NowPlayingBar to control Music in System Settings > Privacy & Security > Automation."
             )
         }
@@ -80,8 +101,36 @@ final class MusicNowPlayingProvider {
             artist: "",
             album: "",
             artworkData: nil,
+            elapsedTime: nil,
+            duration: nil,
             message: message ?? "Music returned an Apple Events error."
         )
+    }
+
+    private func executeMusicCommand(_ command: String) -> Bool {
+        guard isMusicRunning else {
+            return false
+        }
+
+        let scriptSource = """
+        try
+            tell application "/System/Applications/Music.app"
+                \(command)
+            end tell
+            return "ok"
+        on error
+            return "error"
+        end try
+        """
+
+        guard let script = NSAppleScript(source: scriptSource) else {
+            return false
+        }
+
+        var errorInfo: NSDictionary?
+        let descriptor = script.executeAndReturnError(&errorInfo)
+
+        return errorInfo == nil && descriptor.stringValue == "ok"
     }
 
     private func makeAppleScript() -> String {
@@ -100,7 +149,7 @@ final class MusicNowPlayingProvider {
                 set stateText to player state as text
 
                 if stateText is "stopped" then
-                    return {stateText, "", "", "", "", "", ""}
+                    return {stateText, "", "", "", "", "", "", "", ""}
                 end if
 
                 set theTrack to current track
@@ -109,6 +158,16 @@ final class MusicNowPlayingProvider {
                 set artistName to my maybeText(artist of theTrack)
                 set albumName to my maybeText(album of theTrack)
                 set artworkPayload to ""
+                set elapsedTime to ""
+                set trackDuration to ""
+
+                try
+                    set elapsedTime to player position
+                end try
+
+                try
+                    set trackDuration to duration of theTrack
+                end try
 
                 if (count of artworks of theTrack) > 0 then
                     try
@@ -120,14 +179,14 @@ final class MusicNowPlayingProvider {
                     end try
                 end if
 
-                return {stateText, trackID, trackName, artistName, albumName, artworkPayload, ""}
+                return {stateText, trackID, trackName, artistName, albumName, artworkPayload, elapsedTime, trackDuration, ""}
             end tell
         on error errMsg number errNum
             if errNum is -1743 then
-                return {"permissionDenied", "", "", "", "", "", "Allow NowPlayingBar to control Music in System Settings > Privacy & Security > Automation."}
+                return {"permissionDenied", "", "", "", "", "", "", "", "Allow NowPlayingBar to control Music in System Settings > Privacy & Security > Automation."}
             end if
 
-            return {"error", "", "", "", "", "", errMsg}
+            return {"error", "", "", "", "", "", "", "", errMsg}
         end try
         """
     }
@@ -144,5 +203,18 @@ private extension NSAppleEventDescriptor {
         }
 
         return data
+    }
+
+    func optionalDouble(at index: Int) -> Double? {
+        guard let descriptor = atIndex(index) else {
+            return nil
+        }
+
+        if let stringValue = descriptor.stringValue, stringValue.isEmpty {
+            return nil
+        }
+
+        let value = descriptor.doubleValue
+        return value.isFinite ? value : nil
     }
 }

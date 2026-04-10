@@ -42,10 +42,25 @@ final class StatusBarController: NSObject {
 
     private func configurePopover() {
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 300, height: 390)
+        popover.contentSize = NSSize(width: 300, height: 430)
         popover.contentViewController = popoverViewController
 
         popoverViewController.onRefresh = { [weak self] in
+            self?.refresh(force: true)
+        }
+
+        popoverViewController.onPreviousTrack = { [weak self] in
+            self?.provider.previousTrack()
+            self?.refresh(force: true)
+        }
+
+        popoverViewController.onTogglePlayPause = { [weak self] in
+            self?.provider.togglePlayPause()
+            self?.refresh(force: true)
+        }
+
+        popoverViewController.onNextTrack = { [weak self] in
+            self?.provider.nextTrack()
             self?.refresh(force: true)
         }
 

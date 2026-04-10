@@ -3,12 +3,19 @@ import AppKit
 @MainActor
 final class NowPlayingPopoverViewController: NSViewController {
     var onRefresh: (() -> Void)?
+    var onPreviousTrack: (() -> Void)?
+    var onTogglePlayPause: (() -> Void)?
+    var onNextTrack: (() -> Void)?
     var onQuit: (() -> Void)?
 
     private let artworkImageView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
+    private let timeLabel = NSTextField(labelWithString: "")
     private let stateLabel = NSTextField(labelWithString: "")
+    private let previousButton = NSButton(title: "", target: nil, action: nil)
+    private let playPauseButton = NSButton(title: "", target: nil, action: nil)
+    private let nextButton = NSButton(title: "", target: nil, action: nil)
     private let refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
     private let quitButton = NSButton(title: "Quit", target: nil, action: nil)
 
@@ -26,7 +33,9 @@ final class NowPlayingPopoverViewController: NSViewController {
     func update(with trackInfo: TrackInfo) {
         titleLabel.stringValue = trackInfo.detailTitle
         subtitleLabel.stringValue = trackInfo.detailSubtitle
+        timeLabel.stringValue = trackInfo.timeDisplay
         stateLabel.stringValue = trackInfo.message ?? trackInfo.playbackState.displayName
+        updatePlaybackButtons(with: trackInfo)
 
         if let artworkData = trackInfo.artworkData, let image = NSImage(data: artworkData) {
             artworkImageView.image = image
@@ -57,11 +66,20 @@ final class NowPlayingPopoverViewController: NSViewController {
         subtitleLabel.maximumNumberOfLines = 3
         subtitleLabel.textColor = .secondaryLabelColor
 
+        timeLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        timeLabel.alignment = .center
+        timeLabel.lineBreakMode = .byTruncatingTail
+        timeLabel.textColor = .secondaryLabelColor
+
         stateLabel.font = .systemFont(ofSize: 12)
         stateLabel.alignment = .center
         stateLabel.lineBreakMode = .byTruncatingTail
         stateLabel.maximumNumberOfLines = 2
         stateLabel.textColor = .tertiaryLabelColor
+
+        configureIconButton(previousButton, systemSymbolName: "backward.fill", action: #selector(previousButtonClicked(_:)))
+        configureIconButton(playPauseButton, systemSymbolName: "play.fill", action: #selector(playPauseButtonClicked(_:)))
+        configureIconButton(nextButton, systemSymbolName: "forward.fill", action: #selector(nextButtonClicked(_:)))
 
         refreshButton.target = self
         refreshButton.action = #selector(refreshButtonClicked(_:))
@@ -71,6 +89,12 @@ final class NowPlayingPopoverViewController: NSViewController {
     }
 
     private func buildLayout() {
+        let playbackStack = NSStackView(views: [previousButton, playPauseButton, nextButton])
+        playbackStack.orientation = .horizontal
+        playbackStack.alignment = .centerY
+        playbackStack.distribution = .gravityAreas
+        playbackStack.spacing = 12
+
         let buttonStack = NSStackView(views: [refreshButton, quitButton])
         buttonStack.orientation = .horizontal
         buttonStack.alignment = .centerY
@@ -81,7 +105,9 @@ final class NowPlayingPopoverViewController: NSViewController {
             artworkImageView,
             titleLabel,
             subtitleLabel,
+            timeLabel,
             stateLabel,
+            playbackStack,
             buttonStack
         ])
 
@@ -104,9 +130,50 @@ final class NowPlayingPopoverViewController: NSViewController {
 
             titleLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
             subtitleLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
+            timeLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
             stateLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
+            previousButton.widthAnchor.constraint(equalToConstant: 42),
+            previousButton.heightAnchor.constraint(equalToConstant: 32),
+            playPauseButton.widthAnchor.constraint(equalToConstant: 42),
+            playPauseButton.heightAnchor.constraint(equalToConstant: 32),
+            nextButton.widthAnchor.constraint(equalToConstant: 42),
+            nextButton.heightAnchor.constraint(equalToConstant: 32),
             buttonStack.widthAnchor.constraint(equalTo: stackView.widthAnchor)
         ])
+    }
+
+    private func configureIconButton(_ button: NSButton, systemSymbolName: String, action: Selector) {
+        button.image = NSImage(systemSymbolName: systemSymbolName, accessibilityDescription: nil)
+        button.imagePosition = .imageOnly
+        button.bezelStyle = .rounded
+        button.target = self
+        button.action = action
+    }
+
+    private func updatePlaybackButtons(with trackInfo: TrackInfo) {
+        previousButton.isEnabled = trackInfo.canControlPlayback
+        playPauseButton.isEnabled = trackInfo.canControlPlayback
+        nextButton.isEnabled = trackInfo.canControlPlayback
+
+        let playPauseSymbolName = trackInfo.playbackState == .playing ? "pause.fill" : "play.fill"
+        let accessibilityDescription = trackInfo.playbackState == .playing ? "Pause" : "Play"
+
+        playPauseButton.image = NSImage(
+            systemSymbolName: playPauseSymbolName,
+            accessibilityDescription: accessibilityDescription
+        )
+    }
+
+    @objc private func previousButtonClicked(_ sender: NSButton) {
+        onPreviousTrack?()
+    }
+
+    @objc private func playPauseButtonClicked(_ sender: NSButton) {
+        onTogglePlayPause?()
+    }
+
+    @objc private func nextButtonClicked(_ sender: NSButton) {
+        onNextTrack?()
     }
 
     @objc private func refreshButtonClicked(_ sender: NSButton) {

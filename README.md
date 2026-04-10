@@ -2,7 +2,7 @@
 
 NowPlayingBar is a small macOS menu bar app that reads the current Music.app track with Apple Events and shows the track title in the menu bar.
 
-Click the menu bar item to see album artwork, track details, a manual refresh button, and a quit button.
+Click the menu bar item to see album artwork, track details, elapsed and remaining time, playback controls, a manual refresh button, and a quit button.
 
 ## Build
 
