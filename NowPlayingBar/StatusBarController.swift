@@ -6,8 +6,11 @@ enum Metrics {
     static let popoverSize = NSSize(width: 300, height: 430)
     static let artworkSide: CGFloat = 224
     static let contentInset: CGFloat = 18
+    static let contentSpacing: CGFloat = 12
+    static let buttonSpacing: CGFloat = 8
     static let iconButtonSize = NSSize(width: 42, height: 32)
     static let playPauseButtonWidth: CGFloat = 64
+    static let playbackStackWidth: CGFloat = 184
 }
 
 @MainActor

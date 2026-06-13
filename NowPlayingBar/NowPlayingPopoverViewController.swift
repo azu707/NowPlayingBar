@@ -93,13 +93,13 @@ final class NowPlayingPopoverViewController: NSViewController {
         playbackStack.orientation = .horizontal
         playbackStack.alignment = .centerY
         playbackStack.distribution = .equalCentering
-        playbackStack.spacing = 12
+        playbackStack.spacing = Metrics.contentSpacing
 
         let buttonStack = NSStackView(views: [refreshButton, quitButton])
         buttonStack.orientation = .horizontal
         buttonStack.alignment = .centerY
         buttonStack.distribution = .fillEqually
-        buttonStack.spacing = 8
+        buttonStack.spacing = Metrics.buttonSpacing
 
         let stackView = NSStackView(views: [
             artworkImageView,
@@ -114,7 +114,7 @@ final class NowPlayingPopoverViewController: NSViewController {
         stackView.orientation = .vertical
         stackView.alignment = .centerX
         stackView.distribution = .gravityAreas
-        stackView.spacing = 12
+        stackView.spacing = Metrics.contentSpacing
         stackView.translatesAutoresizingMaskIntoConstraints = false
 
         view.addSubview(stackView)
@@ -138,7 +138,7 @@ final class NowPlayingPopoverViewController: NSViewController {
             playPauseButton.heightAnchor.constraint(equalToConstant: Metrics.iconButtonSize.height),
             nextButton.widthAnchor.constraint(equalToConstant: Metrics.iconButtonSize.width),
             nextButton.heightAnchor.constraint(equalToConstant: Metrics.iconButtonSize.height),
-            playbackStack.widthAnchor.constraint(equalToConstant: 184),
+            playbackStack.widthAnchor.constraint(equalToConstant: Metrics.playbackStackWidth),
             buttonStack.widthAnchor.constraint(equalTo: stackView.widthAnchor)
         ])
     }
