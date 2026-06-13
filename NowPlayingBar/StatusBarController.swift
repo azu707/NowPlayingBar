@@ -1,7 +1,7 @@
 import AppKit
 
 enum Metrics {
-    static let pollingInterval: TimeInterval = 2
+    static let popoverRefreshInterval: TimeInterval = 1
     static let menuBarTitleMaxLength = 42
     static let popoverSize = NSSize(width: 300, height: 430)
     static let artworkSide: CGFloat = 224
@@ -14,7 +14,7 @@ enum Metrics {
 }
 
 @MainActor
-final class StatusBarController: NSObject {
+final class StatusBarController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let provider: NowPlayingProviding
     private let popover = NSPopover()
@@ -32,13 +32,14 @@ final class StatusBarController: NSObject {
 
         configureStatusItem()
         configurePopover()
-        startPolling()
+        startObservingMusic()
         refresh(force: true)
     }
 
     func invalidate() {
-        timer?.invalidate()
-        timer = nil
+        stopPopoverRefreshTimer()
+        DistributedNotificationCenter.default().removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         NSStatusBar.system.removeStatusItem(statusItem)
     }
 
@@ -58,6 +59,7 @@ final class StatusBarController: NSObject {
         popover.behavior = .transient
         popover.contentSize = Metrics.popoverSize
         popover.contentViewController = popoverViewController
+        popover.delegate = self
 
         popoverViewController.onRefresh = { [weak self] in
             self?.refresh(force: true)
@@ -101,12 +103,37 @@ final class StatusBarController: NSObject {
         }
     }
 
-    private func startPolling() {
-        timer = Timer.scheduledTimer(withTimeInterval: Metrics.pollingInterval, repeats: true) { [weak self] _ in
+    private func startObservingMusic() {
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(playerInfoDidChange(_:)),
+            name: Notification.Name("com.apple.Music.playerInfo"),
+            object: nil
+        )
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(workspaceApplicationDidTerminate(_:)),
+            name: NSWorkspace.didTerminateApplicationNotification,
+            object: nil
+        )
+    }
+
+    private func startPopoverRefreshTimer() {
+        guard timer == nil else {
+            return
+        }
+
+        timer = Timer.scheduledTimer(withTimeInterval: Metrics.popoverRefreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh(force: false)
             }
         }
+    }
+
+    private func stopPopoverRefreshTimer() {
+        timer?.invalidate()
+        timer = nil
     }
 
     private func refresh(force: Bool) {
@@ -173,5 +200,26 @@ final class StatusBarController: NSObject {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
+    }
+
+    @objc private func playerInfoDidChange(_ note: Notification) {
+        refresh(force: true)
+    }
+
+    @objc private func workspaceApplicationDidTerminate(_ note: Notification) {
+        guard let application = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              application.bundleIdentifier == "com.apple.Music" else {
+            return
+        }
+
+        refresh(force: true)
+    }
+
+    func popoverWillShow(_ notification: Notification) {
+        startPopoverRefreshTimer()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        stopPopoverRefreshTimer()
     }
 }
