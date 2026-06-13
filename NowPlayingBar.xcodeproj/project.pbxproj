@@ -13,6 +13,7 @@
 		0A8F91112BD1000100A00001 /* MusicNowPlayingProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A8F91102BD1000100A00001 /* MusicNowPlayingProvider.swift */; };
 		0A8F91132BD1000100A00001 /* StatusBarController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A8F91122BD1000100A00001 /* StatusBarController.swift */; };
 		0A8F91152BD1000100A00001 /* NowPlayingPopoverViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A8F91142BD1000100A00001 /* NowPlayingPopoverViewController.swift */; };
+		0A8F91202BD1000100A00001 /* NowPlayingProviding.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0A8F911F2BD1000100A00001 /* NowPlayingProviding.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -24,6 +25,7 @@
 		0A8F91122BD1000100A00001 /* StatusBarController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StatusBarController.swift; sourceTree = "<group>"; };
 		0A8F91142BD1000100A00001 /* NowPlayingPopoverViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingPopoverViewController.swift; sourceTree = "<group>"; };
 		0A8F91162BD1000100A00001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		0A8F911F2BD1000100A00001 /* NowPlayingProviding.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NowPlayingProviding.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -59,6 +61,7 @@
 				0A8F910A2BD1000100A00001 /* main.swift */,
 				0A8F910C2BD1000100A00001 /* AppDelegate.swift */,
 				0A8F910E2BD1000100A00001 /* TrackInfo.swift */,
+				0A8F911F2BD1000100A00001 /* NowPlayingProviding.swift */,
 				0A8F91102BD1000100A00001 /* MusicNowPlayingProvider.swift */,
 				0A8F91122BD1000100A00001 /* StatusBarController.swift */,
 				0A8F91142BD1000100A00001 /* NowPlayingPopoverViewController.swift */,
@@ -138,6 +141,7 @@
 				0A8F910B2BD1000100A00001 /* main.swift in Sources */,
 				0A8F910D2BD1000100A00001 /* AppDelegate.swift in Sources */,
 				0A8F910F2BD1000100A00001 /* TrackInfo.swift in Sources */,
+				0A8F91202BD1000100A00001 /* NowPlayingProviding.swift in Sources */,
 				0A8F91112BD1000100A00001 /* MusicNowPlayingProvider.swift in Sources */,
 				0A8F91132BD1000100A00001 /* StatusBarController.swift in Sources */,
 				0A8F91152BD1000100A00001 /* NowPlayingPopoverViewController.swift in Sources */,

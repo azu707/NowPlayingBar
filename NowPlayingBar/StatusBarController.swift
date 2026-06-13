@@ -3,13 +3,13 @@ import AppKit
 @MainActor
 final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
-    private let provider: MusicNowPlayingProvider
+    private let provider: NowPlayingProviding
     private let popover = NSPopover()
     private let popoverViewController: NowPlayingPopoverViewController
     private var timer: Timer?
     private var currentTrack = TrackInfo.idle
 
-    init(provider: MusicNowPlayingProvider) {
+    init(provider: NowPlayingProviding) {
         self.provider = provider
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         popoverViewController = NowPlayingPopoverViewController()
