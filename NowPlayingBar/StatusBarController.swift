@@ -21,6 +21,7 @@ final class StatusBarController: NSObject {
     private let popoverViewController: NowPlayingPopoverViewController
     private var timer: Timer?
     private var currentTrack = TrackInfo.idle
+    private var refreshGeneration = 0
 
     init(provider: NowPlayingProviding) {
         self.provider = provider
@@ -63,18 +64,36 @@ final class StatusBarController: NSObject {
         }
 
         popoverViewController.onPreviousTrack = { [weak self] in
-            self?.provider.previousTrack()
-            self?.refresh(force: true)
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                await self.provider.previousTrack()
+                self.refresh(force: true)
+            }
         }
 
         popoverViewController.onTogglePlayPause = { [weak self] in
-            self?.provider.togglePlayPause()
-            self?.refresh(force: true)
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                await self.provider.togglePlayPause()
+                self.refresh(force: true)
+            }
         }
 
         popoverViewController.onNextTrack = { [weak self] in
-            self?.provider.nextTrack()
-            self?.refresh(force: true)
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                await self.provider.nextTrack()
+                self.refresh(force: true)
+            }
         }
 
         popoverViewController.onQuit = {
@@ -91,8 +110,25 @@ final class StatusBarController: NSObject {
     }
 
     private func refresh(force: Bool) {
-        let nextTrack = provider.fetchNowPlaying()
+        refreshGeneration += 1
+        let generation = refreshGeneration
 
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            let nextTrack = await self.provider.fetchNowPlaying()
+
+            guard generation == self.refreshGeneration else {
+                return
+            }
+
+            self.apply(nextTrack, force: force)
+        }
+    }
+
+    private func apply(_ nextTrack: TrackInfo, force: Bool) {
         guard force || nextTrack != currentTrack else {
             return
         }

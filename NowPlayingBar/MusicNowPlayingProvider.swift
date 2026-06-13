@@ -1,7 +1,7 @@
 import AppKit
 import Foundation
 
-final class MusicNowPlayingProvider {
+final class MusicNowPlayingProvider: @unchecked Sendable {
     fileprivate enum ReplyField: Int {
         case state = 1
         case persistentID
@@ -15,6 +15,7 @@ final class MusicNowPlayingProvider {
     }
 
     private let musicBundleIdentifier = "com.apple.Music"
+    private let scriptQueue = DispatchQueue(label: "net.azu.NowPlayingBar.applescript")
     private lazy var nowPlayingScript: NSAppleScript? = {
         let script = NSAppleScript(source: makeAppleScript())
         script?.compileAndReturnError(nil)
@@ -22,7 +23,27 @@ final class MusicNowPlayingProvider {
     }()
     private var commandScripts: [String: NSAppleScript] = [:]
 
-    func fetchNowPlaying() -> TrackInfo {
+    func fetchNowPlaying() async -> TrackInfo {
+        await withCheckedContinuation { continuation in
+            scriptQueue.async {
+                continuation.resume(returning: self.fetchNowPlayingSync())
+            }
+        }
+    }
+
+    func togglePlayPause() async {
+        await executeMusicCommandAsync("playpause")
+    }
+
+    func nextTrack() async {
+        await executeMusicCommandAsync("next track")
+    }
+
+    func previousTrack() async {
+        await executeMusicCommandAsync("previous track")
+    }
+
+    private func fetchNowPlayingSync() -> TrackInfo {
         guard isMusicRunning else {
             return .idle
         }
@@ -49,19 +70,13 @@ final class MusicNowPlayingProvider {
         return trackInfo(from: descriptor)
     }
 
-    @discardableResult
-    func togglePlayPause() -> Bool {
-        executeMusicCommand("playpause")
-    }
-
-    @discardableResult
-    func nextTrack() -> Bool {
-        executeMusicCommand("next track")
-    }
-
-    @discardableResult
-    func previousTrack() -> Bool {
-        executeMusicCommand("previous track")
+    private func executeMusicCommandAsync(_ command: String) async {
+        await withCheckedContinuation { continuation in
+            scriptQueue.async {
+                _ = self.executeMusicCommand(command)
+                continuation.resume()
+            }
+        }
     }
 
     private var isMusicRunning: Bool {
