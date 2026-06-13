@@ -22,6 +22,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private var timer: Timer?
     private var current = NowPlaying.unavailable(.notRunning)
     private var refreshGeneration = 0
+    private var popoverRefreshTick = 0
+    private var lastFetchDate: Date?
 
     init(provider: NowPlayingProviding) {
         self.provider = provider
@@ -126,7 +128,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
         timer = Timer.scheduledTimer(withTimeInterval: Metrics.popoverRefreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refresh(force: false)
+                self?.popoverTimerFired()
             }
         }
     }
@@ -134,6 +136,16 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private func stopPopoverRefreshTimer() {
         timer?.invalidate()
         timer = nil
+        popoverRefreshTick = 0
+    }
+
+    private func popoverTimerFired() {
+        popoverRefreshTick += 1
+        popoverViewController.update(with: interpolatedNowPlaying())
+
+        if popoverRefreshTick % 5 == 0 {
+            refresh(force: false)
+        }
     }
 
     private func refresh(force: Bool) {
@@ -161,8 +173,24 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         }
 
         current = next
+
+        switch next {
+        case .active:
+            lastFetchDate = Date()
+        case .unavailable:
+            lastFetchDate = nil
+        }
+
         updateStatusItem(with: next)
-        popoverViewController.update(with: next)
+        popoverViewController.update(with: interpolatedNowPlaying())
+    }
+
+    private func interpolatedNowPlaying() -> NowPlaying {
+        guard case .active(let trackInfo) = current, let lastFetchDate else {
+            return current
+        }
+
+        return .active(trackInfo.interpolated(since: lastFetchDate))
     }
 
     private func updateStatusItem(with nowPlaying: NowPlaying) {

@@ -83,6 +83,23 @@ struct TrackInfo: Equatable {
         return "\(Self.formatTime(elapsedTime)) / -\(Self.formatTime(remainingTime))"
     }
 
+    func interpolated(since fetchDate: Date, now: Date = Date()) -> TrackInfo {
+        guard playbackState == .playing, let elapsedTime else {
+            return self
+        }
+
+        var trackInfo = self
+        let interpolatedTime = elapsedTime + now.timeIntervalSince(fetchDate)
+
+        if let duration {
+            trackInfo.elapsedTime = min(interpolatedTime, duration)
+        } else {
+            trackInfo.elapsedTime = interpolatedTime
+        }
+
+        return trackInfo
+    }
+
     private static func formatTime(_ timeInterval: TimeInterval) -> String {
         let seconds = max(Int(timeInterval.rounded(.down)), 0)
         let minutes = seconds / 60
