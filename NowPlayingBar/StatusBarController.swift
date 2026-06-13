@@ -11,6 +11,7 @@ enum Metrics {
     static let iconButtonSize = NSSize(width: 42, height: 32)
     static let playPauseButtonWidth: CGFloat = 64
     static let playbackStackWidth: CGFloat = 184
+    static let timeLabelWidth: CGFloat = 44
 }
 
 @MainActor
@@ -96,6 +97,17 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
                 }
 
                 await self.provider.nextTrack()
+                self.refresh(force: true)
+            }
+        }
+
+        popoverViewController.onSeek = { seconds in
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                await self.provider.setPlayerPosition(seconds)
                 self.refresh(force: true)
             }
         }
