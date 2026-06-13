@@ -8,20 +8,30 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
         case name
         case artist
         case album
-        case artwork
         case elapsed
         case duration
         case message
     }
 
+    fileprivate enum ArtworkField: Int {
+        case persistentID = 1
+        case artwork
+    }
+
     private let musicBundleIdentifier = "com.apple.Music"
     private let scriptQueue = DispatchQueue(label: "net.azu.NowPlayingBar.applescript")
-    private lazy var nowPlayingScript: NSAppleScript? = {
-        let script = NSAppleScript(source: makeAppleScript())
+    private lazy var statusScript: NSAppleScript? = {
+        let script = NSAppleScript(source: makeStatusAppleScript())
+        script?.compileAndReturnError(nil)
+        return script
+    }()
+    private lazy var artworkScript: NSAppleScript? = {
+        let script = NSAppleScript(source: makeArtworkAppleScript())
         script?.compileAndReturnError(nil)
         return script
     }()
     private var commandScripts: [String: NSAppleScript] = [:]
+    private var cachedArtwork: (persistentID: String, data: Data?)?
 
     func fetchNowPlaying() async -> TrackInfo {
         await withCheckedContinuation { continuation in
@@ -48,7 +58,7 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
             return .idle
         }
 
-        guard let script = nowPlayingScript else {
+        guard let script = statusScript else {
             return TrackInfo(
                 playbackState: .error,
                 persistentID: "",
@@ -67,7 +77,13 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
             return trackInfo(fromAppleScriptError: errorInfo)
         }
 
-        return trackInfo(from: descriptor)
+        var trackInfo = trackInfo(from: descriptor)
+
+        if !trackInfo.persistentID.isEmpty {
+            trackInfo.artworkData = artworkData(for: trackInfo.persistentID)
+        }
+
+        return trackInfo
     }
 
     private func executeMusicCommandAsync(_ command: String) async {
@@ -85,11 +101,10 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
 
     private func trackInfo(from descriptor: NSAppleEventDescriptor) -> TrackInfo {
         let stateText = descriptor.string(at: .state)
-        let persistentID = descriptor.string(at: .persistentID)
+        let persistentID = descriptor.string(at: ReplyField.persistentID)
         let name = descriptor.string(at: .name)
         let artist = descriptor.string(at: .artist)
         let album = descriptor.string(at: .album)
-        let artworkData = descriptor.data(at: .artwork)
         let elapsedTime = descriptor.optionalDouble(at: .elapsed)
         let duration = descriptor.optionalDouble(at: .duration)
         let message = descriptor.string(at: .message)
@@ -101,10 +116,43 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
             name: name,
             artist: artist,
             album: album,
-            artworkData: artworkData,
+            artworkData: nil,
             elapsedTime: elapsedTime,
             duration: duration,
             message: message.isEmpty ? nil : message
+        )
+    }
+
+    private func artworkData(for persistentID: String) -> Data? {
+        if let cachedArtwork, cachedArtwork.persistentID == persistentID {
+            return cachedArtwork.data
+        }
+
+        let fetched = fetchArtworkSync()
+
+        guard fetched.persistentID == persistentID else {
+            return nil
+        }
+
+        cachedArtwork = fetched
+        return fetched.data
+    }
+
+    private func fetchArtworkSync() -> (persistentID: String, data: Data?) {
+        guard let script = artworkScript else {
+            return ("", nil)
+        }
+
+        var errorInfo: NSDictionary?
+        let descriptor = script.executeAndReturnError(&errorInfo)
+
+        guard errorInfo == nil else {
+            return ("", nil)
+        }
+
+        return (
+            descriptor.string(at: ArtworkField.persistentID),
+            descriptor.data(at: .artwork)
         )
     }
 
@@ -175,7 +223,7 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
         return errorInfo == nil && descriptor.stringValue == "ok"
     }
 
-    private func makeAppleScript() -> String {
+    private func makeStatusAppleScript() -> String {
         return """
         on maybeText(theValue)
             try
@@ -191,7 +239,7 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
                 set stateText to player state as text
 
                 if stateText is "stopped" then
-                    return {stateText, "", "", "", "", "", "", "", ""}
+                    return {stateText, "", "", "", "", "", "", ""}
                 end if
 
                 set theTrack to current track
@@ -199,7 +247,6 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
                 set trackName to my maybeText(name of theTrack)
                 set artistName to my maybeText(artist of theTrack)
                 set albumName to my maybeText(album of theTrack)
-                set artworkPayload to ""
                 set elapsedTime to ""
                 set trackDuration to ""
 
@@ -211,6 +258,40 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
                     set trackDuration to duration of theTrack
                 end try
 
+                -- Keep this return order aligned with ReplyField in Swift.
+                return {stateText, trackID, trackName, artistName, albumName, elapsedTime, trackDuration, ""}
+            end tell
+        on error errMsg number errNum
+            if errNum is -1743 then
+                return {"permissionDenied", "", "", "", "", "", "", "Allow NowPlayingBar to control Music in System Settings > Privacy & Security > Automation."}
+            end if
+
+            return {"error", "", "", "", "", "", "", errMsg}
+        end try
+        """
+    }
+
+    private func makeArtworkAppleScript() -> String {
+        return """
+        on maybeText(theValue)
+            try
+                if theValue is missing value then return ""
+                return theValue as text
+            on error
+                return ""
+            end try
+        end maybeText
+
+        try
+            tell application id "\(musicBundleIdentifier)"
+                if (player state as text) is "stopped" then
+                    return {"", ""}
+                end if
+
+                set theTrack to current track
+                set trackID to my maybeText(persistent ID of theTrack)
+                set artworkPayload to ""
+
                 if (count of artworks of theTrack) > 0 then
                     try
                         set artworkPayload to raw data of artwork 1 of theTrack
@@ -221,15 +302,10 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
                     end try
                 end if
 
-                -- Keep this return order aligned with ReplyField in Swift.
-                return {stateText, trackID, trackName, artistName, albumName, artworkPayload, elapsedTime, trackDuration, ""}
+                return {trackID, artworkPayload}
             end tell
-        on error errMsg number errNum
-            if errNum is -1743 then
-                return {"permissionDenied", "", "", "", "", "", "", "", "Allow NowPlayingBar to control Music in System Settings > Privacy & Security > Automation."}
-            end if
-
-            return {"error", "", "", "", "", "", "", "", errMsg}
+        on error
+            return {"", ""}
         end try
         """
     }
@@ -240,7 +316,11 @@ private extension NSAppleEventDescriptor {
         atIndex(field.rawValue)?.stringValue ?? ""
     }
 
-    func data(at field: MusicNowPlayingProvider.ReplyField) -> Data? {
+    func string(at field: MusicNowPlayingProvider.ArtworkField) -> String {
+        atIndex(field.rawValue)?.stringValue ?? ""
+    }
+
+    func data(at field: MusicNowPlayingProvider.ArtworkField) -> Data? {
         guard let data = atIndex(field.rawValue)?.data, !data.isEmpty else {
             return nil
         }
