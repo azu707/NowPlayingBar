@@ -2,6 +2,18 @@ import AppKit
 import Foundation
 
 final class MusicNowPlayingProvider {
+    fileprivate enum ReplyField: Int {
+        case state = 1
+        case persistentID
+        case name
+        case artist
+        case album
+        case artwork
+        case elapsed
+        case duration
+        case message
+    }
+
     private let musicBundleIdentifier = "com.apple.Music"
 
     func fetchNowPlaying() -> TrackInfo {
@@ -52,15 +64,15 @@ final class MusicNowPlayingProvider {
     }
 
     private func trackInfo(from descriptor: NSAppleEventDescriptor) -> TrackInfo {
-        let stateText = descriptor.string(at: 1)
-        let persistentID = descriptor.string(at: 2)
-        let name = descriptor.string(at: 3)
-        let artist = descriptor.string(at: 4)
-        let album = descriptor.string(at: 5)
-        let artworkData = descriptor.data(at: 6)
-        let elapsedTime = descriptor.optionalDouble(at: 7)
-        let duration = descriptor.optionalDouble(at: 8)
-        let message = descriptor.string(at: 9)
+        let stateText = descriptor.string(at: .state)
+        let persistentID = descriptor.string(at: .persistentID)
+        let name = descriptor.string(at: .name)
+        let artist = descriptor.string(at: .artist)
+        let album = descriptor.string(at: .album)
+        let artworkData = descriptor.data(at: .artwork)
+        let elapsedTime = descriptor.optionalDouble(at: .elapsed)
+        let duration = descriptor.optionalDouble(at: .duration)
+        let message = descriptor.string(at: .message)
         let state = PlaybackState(rawValue: stateText) ?? .error
 
         return TrackInfo(
@@ -179,6 +191,7 @@ final class MusicNowPlayingProvider {
                     end try
                 end if
 
+                -- Keep this return order aligned with ReplyField in Swift.
                 return {stateText, trackID, trackName, artistName, albumName, artworkPayload, elapsedTime, trackDuration, ""}
             end tell
         on error errMsg number errNum
@@ -193,20 +206,20 @@ final class MusicNowPlayingProvider {
 }
 
 private extension NSAppleEventDescriptor {
-    func string(at index: Int) -> String {
-        atIndex(index)?.stringValue ?? ""
+    func string(at field: MusicNowPlayingProvider.ReplyField) -> String {
+        atIndex(field.rawValue)?.stringValue ?? ""
     }
 
-    func data(at index: Int) -> Data? {
-        guard let data = atIndex(index)?.data, !data.isEmpty else {
+    func data(at field: MusicNowPlayingProvider.ReplyField) -> Data? {
+        guard let data = atIndex(field.rawValue)?.data, !data.isEmpty else {
             return nil
         }
 
         return data
     }
 
-    func optionalDouble(at index: Int) -> Double? {
-        guard let descriptor = atIndex(index) else {
+    func optionalDouble(at field: MusicNowPlayingProvider.ReplyField) -> Double? {
+        guard let descriptor = atIndex(field.rawValue) else {
             return nil
         }
 
