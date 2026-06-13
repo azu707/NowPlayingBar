@@ -1,5 +1,15 @@
 import AppKit
 
+enum Metrics {
+    static let pollingInterval: TimeInterval = 2
+    static let menuBarTitleMaxLength = 42
+    static let popoverSize = NSSize(width: 300, height: 430)
+    static let artworkSide: CGFloat = 224
+    static let contentInset: CGFloat = 18
+    static let iconButtonSize = NSSize(width: 42, height: 32)
+    static let playPauseButtonWidth: CGFloat = 64
+}
+
 @MainActor
 final class StatusBarController: NSObject {
     private let statusItem: NSStatusItem
@@ -42,7 +52,7 @@ final class StatusBarController: NSObject {
 
     private func configurePopover() {
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 300, height: 430)
+        popover.contentSize = Metrics.popoverSize
         popover.contentViewController = popoverViewController
 
         popoverViewController.onRefresh = { [weak self] in
@@ -70,7 +80,7 @@ final class StatusBarController: NSObject {
     }
 
     private func startPolling() {
-        timer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: Metrics.pollingInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh(force: false)
             }
@@ -94,7 +104,7 @@ final class StatusBarController: NSObject {
             return
         }
 
-        let title = truncate(trackInfo.menuBarTitle, maxLength: 42)
+        let title = truncate(trackInfo.menuBarTitle, maxLength: Metrics.menuBarTitleMaxLength)
         button.title = title
 
         if title.isEmpty {
@@ -109,7 +119,7 @@ final class StatusBarController: NSObject {
             return value
         }
 
-        return "\(value.prefix(maxLength - 3))..."
+        return "\(value.prefix(maxLength - 1))…"
     }
 
     @objc private func togglePopover(_ sender: Any?) {

@@ -120,24 +120,24 @@ final class NowPlayingPopoverViewController: NSViewController {
         view.addSubview(stackView)
 
         NSLayoutConstraint.activate([
-            stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 18),
-            stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -18),
-            stackView.topAnchor.constraint(equalTo: view.topAnchor, constant: 18),
-            stackView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -18),
+            stackView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: Metrics.contentInset),
+            stackView.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -Metrics.contentInset),
+            stackView.topAnchor.constraint(equalTo: view.topAnchor, constant: Metrics.contentInset),
+            stackView.bottomAnchor.constraint(equalTo: view.bottomAnchor, constant: -Metrics.contentInset),
 
-            artworkImageView.widthAnchor.constraint(equalToConstant: 224),
+            artworkImageView.widthAnchor.constraint(equalToConstant: Metrics.artworkSide),
             artworkImageView.heightAnchor.constraint(equalTo: artworkImageView.widthAnchor),
 
             titleLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
             subtitleLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
             timeLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
             stateLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
-            previousButton.widthAnchor.constraint(equalToConstant: 42),
-            previousButton.heightAnchor.constraint(equalToConstant: 32),
-            playPauseButton.widthAnchor.constraint(equalToConstant: 64),
-            playPauseButton.heightAnchor.constraint(equalToConstant: 32),
-            nextButton.widthAnchor.constraint(equalToConstant: 42),
-            nextButton.heightAnchor.constraint(equalToConstant: 32),
+            previousButton.widthAnchor.constraint(equalToConstant: Metrics.iconButtonSize.width),
+            previousButton.heightAnchor.constraint(equalToConstant: Metrics.iconButtonSize.height),
+            playPauseButton.widthAnchor.constraint(equalToConstant: Metrics.playPauseButtonWidth),
+            playPauseButton.heightAnchor.constraint(equalToConstant: Metrics.iconButtonSize.height),
+            nextButton.widthAnchor.constraint(equalToConstant: Metrics.iconButtonSize.width),
+            nextButton.heightAnchor.constraint(equalToConstant: Metrics.iconButtonSize.height),
             playbackStack.widthAnchor.constraint(equalToConstant: 184),
             buttonStack.widthAnchor.constraint(equalTo: stackView.widthAnchor)
         ])
