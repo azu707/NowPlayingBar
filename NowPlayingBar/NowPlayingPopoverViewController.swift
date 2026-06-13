@@ -112,9 +112,28 @@ final class NowPlayingPopoverViewController: NSViewController {
         stateLabel.maximumNumberOfLines = 2
         stateLabel.textColor = .tertiaryLabelColor
 
-        configureIconButton(previousButton, systemSymbolName: "backward.fill", action: #selector(previousButtonClicked(_:)))
-        configureIconButton(playPauseButton, systemSymbolName: "play.fill", action: #selector(playPauseButtonClicked(_:)))
-        configureIconButton(nextButton, systemSymbolName: "forward.fill", action: #selector(nextButtonClicked(_:)))
+        configureIconButton(
+            previousButton,
+            systemSymbolName: "backward.fill",
+            accessibilityDescription: "Previous Track",
+            action: #selector(previousButtonClicked(_:))
+        )
+        configureIconButton(
+            playPauseButton,
+            systemSymbolName: "play.fill",
+            accessibilityDescription: nil,
+            action: #selector(playPauseButtonClicked(_:))
+        )
+        configureIconButton(
+            nextButton,
+            systemSymbolName: "forward.fill",
+            accessibilityDescription: "Next Track",
+            action: #selector(nextButtonClicked(_:))
+        )
+
+        playPauseButton.keyEquivalent = " "
+        previousButton.keyEquivalent = String(UnicodeScalar(NSLeftArrowFunctionKey)!)
+        nextButton.keyEquivalent = String(UnicodeScalar(NSRightArrowFunctionKey)!)
 
         refreshButton.target = self
         refreshButton.action = #selector(refreshButtonClicked(_:))
@@ -186,8 +205,13 @@ final class NowPlayingPopoverViewController: NSViewController {
         ])
     }
 
-    private func configureIconButton(_ button: NSButton, systemSymbolName: String, action: Selector) {
-        button.image = NSImage(systemSymbolName: systemSymbolName, accessibilityDescription: nil)
+    private func configureIconButton(
+        _ button: NSButton,
+        systemSymbolName: String,
+        accessibilityDescription: String?,
+        action: Selector
+    ) {
+        button.image = NSImage(systemSymbolName: systemSymbolName, accessibilityDescription: accessibilityDescription)
         button.imagePosition = .imageOnly
         button.bezelStyle = .rounded
         button.target = self
