@@ -15,14 +15,19 @@ final class MusicNowPlayingProvider {
     }
 
     private let musicBundleIdentifier = "com.apple.Music"
+    private lazy var nowPlayingScript: NSAppleScript? = {
+        let script = NSAppleScript(source: makeAppleScript())
+        script?.compileAndReturnError(nil)
+        return script
+    }()
+    private var commandScripts: [String: NSAppleScript] = [:]
 
     func fetchNowPlaying() -> TrackInfo {
         guard isMusicRunning else {
             return .idle
         }
 
-        let scriptSource = makeAppleScript()
-        guard let script = NSAppleScript(source: scriptSource) else {
+        guard let script = nowPlayingScript else {
             return TrackInfo(
                 playbackState: .error,
                 persistentID: "",
@@ -124,19 +129,29 @@ final class MusicNowPlayingProvider {
             return false
         }
 
-        let scriptSource = """
-        try
-            tell application "/System/Applications/Music.app"
-                \(command)
-            end tell
-            return "ok"
-        on error
-            return "error"
-        end try
-        """
+        let script: NSAppleScript
 
-        guard let script = NSAppleScript(source: scriptSource) else {
-            return false
+        if let cachedScript = commandScripts[command] {
+            script = cachedScript
+        } else {
+            let scriptSource = """
+            try
+                tell application "/System/Applications/Music.app"
+                    \(command)
+                end tell
+                return "ok"
+            on error
+                return "error"
+            end try
+            """
+
+            guard let compiledScript = NSAppleScript(source: scriptSource) else {
+                return false
+            }
+
+            compiledScript.compileAndReturnError(nil)
+            commandScripts[command] = compiledScript
+            script = compiledScript
         }
 
         var errorInfo: NSDictionary?
