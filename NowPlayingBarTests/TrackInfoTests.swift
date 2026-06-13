@@ -120,6 +120,42 @@ final class TrackInfoTests: XCTestCase {
         XCTAssertEqual(info.timeDisplay, "4:10 / -0:00")
     }
 
+    func testInterpolatedElapsedTimeAdvancesWhilePlaying() {
+        var info = trackInfo(playbackState: .playing)
+        info.elapsedTime = 10
+        info.duration = 20
+
+        let fetchDate = Date(timeIntervalSinceReferenceDate: 100)
+        let now = Date(timeIntervalSinceReferenceDate: 105)
+        let interpolated = info.interpolated(since: fetchDate, now: now)
+
+        XCTAssertEqual(interpolated.elapsedTime, 15)
+    }
+
+    func testInterpolatedElapsedTimeClampsToDuration() {
+        var info = trackInfo(playbackState: .playing)
+        info.elapsedTime = 18
+        info.duration = 20
+
+        let fetchDate = Date(timeIntervalSinceReferenceDate: 100)
+        let now = Date(timeIntervalSinceReferenceDate: 105)
+        let interpolated = info.interpolated(since: fetchDate, now: now)
+
+        XCTAssertEqual(interpolated.elapsedTime, 20)
+    }
+
+    func testInterpolatedElapsedTimeDoesNotAdvanceWhenPaused() {
+        var info = trackInfo(playbackState: .paused)
+        info.elapsedTime = 10
+        info.duration = 20
+
+        let fetchDate = Date(timeIntervalSinceReferenceDate: 100)
+        let now = Date(timeIntervalSinceReferenceDate: 105)
+        let interpolated = info.interpolated(since: fetchDate, now: now)
+
+        XCTAssertEqual(interpolated.elapsedTime, 10)
+    }
+
     func testPlaybackStateDisplayNames() {
         XCTAssertEqual(PlaybackState.playing.displayName, "Playing")
         XCTAssertEqual(PlaybackState.paused.displayName, "Paused")

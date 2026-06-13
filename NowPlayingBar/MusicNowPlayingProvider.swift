@@ -53,6 +53,15 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
         await executeMusicCommandAsync("previous track")
     }
 
+    func setPlayerPosition(_ seconds: Double) async {
+        guard seconds.isFinite else {
+            return
+        }
+
+        let clampedSeconds = max(seconds, 0)
+        await executeMusicCommandAsync("set player position to \(clampedSeconds)", cachesScript: false)
+    }
+
     private func fetchNowPlayingSync() -> NowPlaying {
         guard isMusicRunning else {
             return .unavailable(.notRunning)
@@ -79,10 +88,10 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
         return nowPlaying
     }
 
-    private func executeMusicCommandAsync(_ command: String) async {
+    private func executeMusicCommandAsync(_ command: String, cachesScript: Bool = true) async {
         await withCheckedContinuation { continuation in
             scriptQueue.async {
-                _ = self.executeMusicCommand(command)
+                _ = self.executeMusicCommand(command, cachesScript: cachesScript)
                 continuation.resume()
             }
         }
@@ -171,14 +180,14 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
         return .unavailable(.error(errorMessage))
     }
 
-    private func executeMusicCommand(_ command: String) -> Bool {
+    private func executeMusicCommand(_ command: String, cachesScript: Bool = true) -> Bool {
         guard isMusicRunning else {
             return false
         }
 
         let script: NSAppleScript
 
-        if let cachedScript = commandScripts[command] {
+        if cachesScript, let cachedScript = commandScripts[command] {
             script = cachedScript
         } else {
             let scriptSource = """
@@ -197,7 +206,11 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
             }
 
             compiledScript.compileAndReturnError(nil)
-            commandScripts[command] = compiledScript
+
+            if cachesScript {
+                commandScripts[command] = compiledScript
+            }
+
             script = compiledScript
         }
 

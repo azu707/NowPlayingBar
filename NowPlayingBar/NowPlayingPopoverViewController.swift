@@ -1,29 +1,46 @@
 import AppKit
 
 @MainActor
+private final class AppearanceTrackingView: NSView {
+    var onEffectiveAppearanceChanged: (() -> Void)?
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onEffectiveAppearanceChanged?()
+    }
+}
+
+@MainActor
 final class NowPlayingPopoverViewController: NSViewController {
     var onRefresh: (() -> Void)?
     var onPreviousTrack: (() -> Void)?
     var onTogglePlayPause: (() -> Void)?
     var onNextTrack: (() -> Void)?
+    var onSeek: ((Double) -> Void)?
     var onQuit: (() -> Void)?
 
     private let artworkImageView = NSImageView()
     private let titleLabel = NSTextField(labelWithString: "")
     private let subtitleLabel = NSTextField(labelWithString: "")
-    private let timeLabel = NSTextField(labelWithString: "")
+    private let elapsedLabel = NSTextField(labelWithString: "")
+    private let seekSlider = NSSlider(value: 0, minValue: 0, maxValue: 1, target: nil, action: nil)
+    private let remainingLabel = NSTextField(labelWithString: "")
     private let stateLabel = NSTextField(labelWithString: "")
     private let previousButton = NSButton(title: "", target: nil, action: nil)
     private let playPauseButton = NSButton(title: "", target: nil, action: nil)
     private let nextButton = NSButton(title: "", target: nil, action: nil)
     private let refreshButton = NSButton(title: "Refresh", target: nil, action: nil)
     private let quitButton = NSButton(title: "Quit", target: nil, action: nil)
+    private var isScrubbing = false
 
     override func loadView() {
-        view = NSView()
-        view.translatesAutoresizingMaskIntoConstraints = false
-        view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        let contentView = AppearanceTrackingView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.wantsLayer = true
+        contentView.onEffectiveAppearanceChanged = { [weak self] in
+            self?.updateArtworkPlaceholderBackground()
+        }
+        view = contentView
 
         configureSubviews()
         buildLayout()
@@ -42,7 +59,7 @@ final class NowPlayingPopoverViewController: NSViewController {
     private func updateActiveTrack(_ trackInfo: TrackInfo) {
         titleLabel.stringValue = trackInfo.detailTitle
         subtitleLabel.stringValue = trackInfo.detailSubtitle
-        timeLabel.stringValue = trackInfo.timeDisplay
+        updateTimeControls(with: trackInfo)
         stateLabel.stringValue = trackInfo.playbackState.displayName
         updatePlaybackButtons(playbackState: trackInfo.playbackState, isEnabled: true)
 
@@ -59,7 +76,7 @@ final class NowPlayingPopoverViewController: NSViewController {
     private func updateUnavailable(_ reason: UnavailableReason) {
         titleLabel.stringValue = unavailableTitle(for: reason)
         subtitleLabel.stringValue = reason.message
-        timeLabel.stringValue = ""
+        updateTimeControls(with: nil)
         stateLabel.stringValue = reason.message
         updatePlaybackButtons(playbackState: .stopped, isEnabled: false)
         artworkImageView.image = NSImage(
@@ -74,7 +91,7 @@ final class NowPlayingPopoverViewController: NSViewController {
         artworkImageView.wantsLayer = true
         artworkImageView.layer?.cornerRadius = 8
         artworkImageView.layer?.masksToBounds = true
-        artworkImageView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        updateArtworkPlaceholderBackground()
 
         titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
         titleLabel.alignment = .center
@@ -87,10 +104,20 @@ final class NowPlayingPopoverViewController: NSViewController {
         subtitleLabel.maximumNumberOfLines = 3
         subtitleLabel.textColor = .secondaryLabelColor
 
-        timeLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
-        timeLabel.alignment = .center
-        timeLabel.lineBreakMode = .byTruncatingTail
-        timeLabel.textColor = .secondaryLabelColor
+        elapsedLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        elapsedLabel.alignment = .right
+        elapsedLabel.lineBreakMode = .byTruncatingTail
+        elapsedLabel.textColor = .secondaryLabelColor
+
+        seekSlider.controlSize = .small
+        seekSlider.isContinuous = true
+        seekSlider.target = self
+        seekSlider.action = #selector(sliderMoved(_:))
+
+        remainingLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        remainingLabel.alignment = .left
+        remainingLabel.lineBreakMode = .byTruncatingTail
+        remainingLabel.textColor = .secondaryLabelColor
 
         stateLabel.font = .systemFont(ofSize: 12)
         stateLabel.alignment = .center
@@ -98,9 +125,28 @@ final class NowPlayingPopoverViewController: NSViewController {
         stateLabel.maximumNumberOfLines = 2
         stateLabel.textColor = .tertiaryLabelColor
 
-        configureIconButton(previousButton, systemSymbolName: "backward.fill", action: #selector(previousButtonClicked(_:)))
-        configureIconButton(playPauseButton, systemSymbolName: "play.fill", action: #selector(playPauseButtonClicked(_:)))
-        configureIconButton(nextButton, systemSymbolName: "forward.fill", action: #selector(nextButtonClicked(_:)))
+        configureIconButton(
+            previousButton,
+            systemSymbolName: "backward.fill",
+            accessibilityDescription: "Previous Track",
+            action: #selector(previousButtonClicked(_:))
+        )
+        configureIconButton(
+            playPauseButton,
+            systemSymbolName: "play.fill",
+            accessibilityDescription: nil,
+            action: #selector(playPauseButtonClicked(_:))
+        )
+        configureIconButton(
+            nextButton,
+            systemSymbolName: "forward.fill",
+            accessibilityDescription: "Next Track",
+            action: #selector(nextButtonClicked(_:))
+        )
+
+        playPauseButton.keyEquivalent = " "
+        previousButton.keyEquivalent = String(UnicodeScalar(NSLeftArrowFunctionKey)!)
+        nextButton.keyEquivalent = String(UnicodeScalar(NSRightArrowFunctionKey)!)
 
         refreshButton.target = self
         refreshButton.action = #selector(refreshButtonClicked(_:))
@@ -110,6 +156,12 @@ final class NowPlayingPopoverViewController: NSViewController {
     }
 
     private func buildLayout() {
+        let timeStack = NSStackView(views: [elapsedLabel, seekSlider, remainingLabel])
+        timeStack.orientation = .horizontal
+        timeStack.alignment = .centerY
+        timeStack.distribution = .fill
+        timeStack.spacing = Metrics.buttonSpacing
+
         let playbackStack = NSStackView(views: [previousButton, playPauseButton, nextButton])
         playbackStack.orientation = .horizontal
         playbackStack.alignment = .centerY
@@ -126,7 +178,7 @@ final class NowPlayingPopoverViewController: NSViewController {
             artworkImageView,
             titleLabel,
             subtitleLabel,
-            timeLabel,
+            timeStack,
             stateLabel,
             playbackStack,
             buttonStack
@@ -151,7 +203,9 @@ final class NowPlayingPopoverViewController: NSViewController {
 
             titleLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
             subtitleLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
-            timeLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
+            timeStack.widthAnchor.constraint(equalTo: stackView.widthAnchor),
+            elapsedLabel.widthAnchor.constraint(equalToConstant: Metrics.timeLabelWidth),
+            remainingLabel.widthAnchor.constraint(equalToConstant: Metrics.timeLabelWidth),
             stateLabel.widthAnchor.constraint(equalTo: stackView.widthAnchor),
             previousButton.widthAnchor.constraint(equalToConstant: Metrics.iconButtonSize.width),
             previousButton.heightAnchor.constraint(equalToConstant: Metrics.iconButtonSize.height),
@@ -164,12 +218,23 @@ final class NowPlayingPopoverViewController: NSViewController {
         ])
     }
 
-    private func configureIconButton(_ button: NSButton, systemSymbolName: String, action: Selector) {
-        button.image = NSImage(systemSymbolName: systemSymbolName, accessibilityDescription: nil)
+    private func configureIconButton(
+        _ button: NSButton,
+        systemSymbolName: String,
+        accessibilityDescription: String?,
+        action: Selector
+    ) {
+        button.image = NSImage(systemSymbolName: systemSymbolName, accessibilityDescription: accessibilityDescription)
         button.imagePosition = .imageOnly
         button.bezelStyle = .rounded
         button.target = self
         button.action = action
+    }
+
+    private func updateArtworkPlaceholderBackground() {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            artworkImageView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        }
     }
 
     private func updatePlaybackButtons(playbackState: PlaybackState, isEnabled: Bool) {
@@ -184,6 +249,48 @@ final class NowPlayingPopoverViewController: NSViewController {
             systemSymbolName: playPauseSymbolName,
             accessibilityDescription: accessibilityDescription
         )
+    }
+
+    private func updateTimeControls(with trackInfo: TrackInfo?) {
+        guard !isScrubbing else {
+            return
+        }
+
+        guard let trackInfo,
+              let elapsedTime = trackInfo.elapsedTime,
+              let duration = trackInfo.duration else {
+            elapsedLabel.stringValue = ""
+            remainingLabel.stringValue = ""
+            seekSlider.minValue = 0
+            seekSlider.maxValue = 1
+            seekSlider.doubleValue = 0
+            seekSlider.isEnabled = false
+            return
+        }
+
+        let clampedElapsedTime = min(max(elapsedTime, 0), duration)
+
+        elapsedLabel.stringValue = formatTime(clampedElapsedTime)
+        remainingLabel.stringValue = "-\(formatTime(duration - clampedElapsedTime))"
+        seekSlider.minValue = 0
+        seekSlider.maxValue = duration
+        seekSlider.doubleValue = clampedElapsedTime
+        seekSlider.isEnabled = true
+    }
+
+    private func updateTimePreview(_ seconds: Double) {
+        let duration = seekSlider.maxValue
+        let clampedSeconds = min(max(seconds, 0), duration)
+
+        elapsedLabel.stringValue = formatTime(clampedSeconds)
+        remainingLabel.stringValue = "-\(formatTime(duration - clampedSeconds))"
+    }
+
+    private func formatTime(_ timeInterval: TimeInterval) -> String {
+        let seconds = max(Int(timeInterval.rounded(.down)), 0)
+        let minutes = seconds / 60
+        let remainingSeconds = seconds % 60
+        return String(format: "%d:%02d", minutes, remainingSeconds)
     }
 
     private func unavailableTitle(for reason: UnavailableReason) -> String {
@@ -207,6 +314,16 @@ final class NowPlayingPopoverViewController: NSViewController {
 
     @objc private func nextButtonClicked(_ sender: NSButton) {
         onNextTrack?()
+    }
+
+    @objc private func sliderMoved(_ sender: NSSlider) {
+        isScrubbing = true
+        updateTimePreview(sender.doubleValue)
+
+        if NSApp.currentEvent?.type == .leftMouseUp {
+            isScrubbing = false
+            onSeek?(sender.doubleValue)
+        }
     }
 
     @objc private func refreshButtonClicked(_ sender: NSButton) {

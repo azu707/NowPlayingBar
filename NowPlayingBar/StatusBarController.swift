@@ -11,6 +11,7 @@ enum Metrics {
     static let iconButtonSize = NSSize(width: 42, height: 32)
     static let playPauseButtonWidth: CGFloat = 64
     static let playbackStackWidth: CGFloat = 184
+    static let timeLabelWidth: CGFloat = 44
 }
 
 @MainActor
@@ -22,6 +23,8 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private var timer: Timer?
     private var current = NowPlaying.unavailable(.notRunning)
     private var refreshGeneration = 0
+    private var popoverRefreshTick = 0
+    private var lastFetchDate: Date?
 
     init(provider: NowPlayingProviding) {
         self.provider = provider
@@ -65,7 +68,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             self?.refresh(force: true)
         }
 
-        popoverViewController.onPreviousTrack = {
+        popoverViewController.onPreviousTrack = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else {
                     return
@@ -76,7 +79,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             }
         }
 
-        popoverViewController.onTogglePlayPause = {
+        popoverViewController.onTogglePlayPause = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else {
                     return
@@ -87,13 +90,24 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             }
         }
 
-        popoverViewController.onNextTrack = {
+        popoverViewController.onNextTrack = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self else {
                     return
                 }
 
                 await self.provider.nextTrack()
+                self.refresh(force: true)
+            }
+        }
+
+        popoverViewController.onSeek = { [weak self] seconds in
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                await self.provider.setPlayerPosition(seconds)
                 self.refresh(force: true)
             }
         }
@@ -126,7 +140,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
         timer = Timer.scheduledTimer(withTimeInterval: Metrics.popoverRefreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refresh(force: false)
+                self?.popoverTimerFired()
             }
         }
     }
@@ -134,6 +148,16 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private func stopPopoverRefreshTimer() {
         timer?.invalidate()
         timer = nil
+        popoverRefreshTick = 0
+    }
+
+    private func popoverTimerFired() {
+        popoverRefreshTick += 1
+        popoverViewController.update(with: interpolatedNowPlaying())
+
+        if popoverRefreshTick % 5 == 0 {
+            refresh(force: false)
+        }
     }
 
     private func refresh(force: Bool) {
@@ -161,8 +185,24 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         }
 
         current = next
+
+        switch next {
+        case .active:
+            lastFetchDate = Date()
+        case .unavailable:
+            lastFetchDate = nil
+        }
+
         updateStatusItem(with: next)
-        popoverViewController.update(with: next)
+        popoverViewController.update(with: interpolatedNowPlaying())
+    }
+
+    private func interpolatedNowPlaying() -> NowPlaying {
+        guard case .active(let trackInfo) = current, let lastFetchDate else {
+            return current
+        }
+
+        return .active(trackInfo.interpolated(since: lastFetchDate))
     }
 
     private func updateStatusItem(with nowPlaying: NowPlaying) {
@@ -172,10 +212,14 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
         let title: String
         let toolTip: String
+        let symbolName: String
+        let isPaused: Bool
 
         switch nowPlaying {
         case .active(let trackInfo):
             title = truncate(trackInfo.menuBarTitle, maxLength: Metrics.menuBarTitleMaxLength)
+            isPaused = trackInfo.playbackState == .paused
+            symbolName = isPaused ? "pause.fill" : "music.note"
 
             if title.isEmpty {
                 toolTip = trackInfo.playbackState.displayName
@@ -185,9 +229,21 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         case .unavailable(let reason):
             title = ""
             toolTip = reason.message
+            symbolName = "music.note"
+            isPaused = false
         }
 
-        button.title = title
+        button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "NowPlayingBar")
+
+        if isPaused {
+            button.attributedTitle = NSAttributedString(
+                string: title,
+                attributes: [.foregroundColor: NSColor.secondaryLabelColor]
+            )
+        } else {
+            button.title = title
+        }
+
         button.toolTip = toolTip
     }
 
