@@ -212,10 +212,14 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
 
         let title: String
         let toolTip: String
+        let symbolName: String
+        let isPaused: Bool
 
         switch nowPlaying {
         case .active(let trackInfo):
             title = truncate(trackInfo.menuBarTitle, maxLength: Metrics.menuBarTitleMaxLength)
+            isPaused = trackInfo.playbackState == .paused
+            symbolName = isPaused ? "pause.fill" : "music.note"
 
             if title.isEmpty {
                 toolTip = trackInfo.playbackState.displayName
@@ -225,9 +229,21 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
         case .unavailable(let reason):
             title = ""
             toolTip = reason.message
+            symbolName = "music.note"
+            isPaused = false
         }
 
-        button.title = title
+        button.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "NowPlayingBar")
+
+        if isPaused {
+            button.attributedTitle = NSAttributedString(
+                string: title,
+                attributes: [.foregroundColor: NSColor.secondaryLabelColor]
+            )
+        } else {
+            button.title = title
+        }
+
         button.toolTip = toolTip
     }
 
