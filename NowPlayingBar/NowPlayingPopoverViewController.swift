@@ -1,6 +1,16 @@
 import AppKit
 
 @MainActor
+private final class AppearanceTrackingView: NSView {
+    var onEffectiveAppearanceChanged: (() -> Void)?
+
+    override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        onEffectiveAppearanceChanged?()
+    }
+}
+
+@MainActor
 final class NowPlayingPopoverViewController: NSViewController {
     var onRefresh: (() -> Void)?
     var onPreviousTrack: (() -> Void)?
@@ -24,10 +34,13 @@ final class NowPlayingPopoverViewController: NSViewController {
     private var isScrubbing = false
 
     override func loadView() {
-        view = NSView()
-        view.translatesAutoresizingMaskIntoConstraints = false
-        view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        let contentView = AppearanceTrackingView()
+        contentView.translatesAutoresizingMaskIntoConstraints = false
+        contentView.wantsLayer = true
+        contentView.onEffectiveAppearanceChanged = { [weak self] in
+            self?.updateArtworkPlaceholderBackground()
+        }
+        view = contentView
 
         configureSubviews()
         buildLayout()
@@ -78,7 +91,7 @@ final class NowPlayingPopoverViewController: NSViewController {
         artworkImageView.wantsLayer = true
         artworkImageView.layer?.cornerRadius = 8
         artworkImageView.layer?.masksToBounds = true
-        artworkImageView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        updateArtworkPlaceholderBackground()
 
         titleLabel.font = .systemFont(ofSize: 16, weight: .semibold)
         titleLabel.alignment = .center
@@ -216,6 +229,12 @@ final class NowPlayingPopoverViewController: NSViewController {
         button.bezelStyle = .rounded
         button.target = self
         button.action = action
+    }
+
+    private func updateArtworkPlaceholderBackground() {
+        view.effectiveAppearance.performAsCurrentDrawingAppearance {
+            artworkImageView.layer?.backgroundColor = NSColor.controlBackgroundColor.cgColor
+        }
     }
 
     private func updatePlaybackButtons(playbackState: PlaybackState, isEnabled: Bool) {
