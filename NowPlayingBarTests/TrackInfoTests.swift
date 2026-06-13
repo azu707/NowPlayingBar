@@ -3,7 +3,7 @@ import XCTest
 
 final class TrackInfoTests: XCTestCase {
     func testMenuBarTitleWithNameAndArtist() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.name = "Song"
         info.artist = "Artist"
 
@@ -11,48 +11,47 @@ final class TrackInfoTests: XCTestCase {
     }
 
     func testMenuBarTitleFallsBackToNameOnly() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.name = "Song"
 
         XCTAssertEqual(info.menuBarTitle, "Song")
     }
 
     func testMenuBarTitleFallsBackToArtistOnly() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.artist = "Artist"
 
         XCTAssertEqual(info.menuBarTitle, "Artist")
     }
 
     func testMenuBarTitleIsEmptyWithoutTrackFields() {
-        let info = TrackInfo.idle
+        let info = trackInfo()
 
         XCTAssertEqual(info.menuBarTitle, "")
     }
 
-    func testDetailSubtitleUsesMessageWhenArtistAndAlbumAreEmpty() {
-        var info = TrackInfo.idle
-        info.message = "Custom message"
+    func testDetailSubtitleUsesPlaybackStateWhenArtistAndAlbumAreEmpty() {
+        let info = trackInfo(playbackState: .paused)
 
-        XCTAssertEqual(info.detailSubtitle, "Custom message")
+        XCTAssertEqual(info.detailSubtitle, "Paused")
     }
 
     func testDetailSubtitleFallsBackToAlbumOnly() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.album = "Album"
 
         XCTAssertEqual(info.detailSubtitle, "Album")
     }
 
     func testDetailSubtitleFallsBackToArtistOnly() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.artist = "Artist"
 
         XCTAssertEqual(info.detailSubtitle, "Artist")
     }
 
     func testDetailSubtitleCombinesArtistAndAlbum() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.artist = "Artist"
         info.album = "Album"
 
@@ -60,7 +59,7 @@ final class TrackInfoTests: XCTestCase {
     }
 
     func testTimeDisplayFormatsElapsedAndRemaining() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.elapsedTime = 83.4
         info.duration = 200
 
@@ -68,7 +67,7 @@ final class TrackInfoTests: XCTestCase {
     }
 
     func testTimeDisplayFormatsZeroSeconds() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.elapsedTime = 0
         info.duration = 0
 
@@ -76,7 +75,7 @@ final class TrackInfoTests: XCTestCase {
     }
 
     func testTimeDisplayFormatsMinuteBoundary() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.elapsedTime = 59
         info.duration = 119
 
@@ -89,7 +88,7 @@ final class TrackInfoTests: XCTestCase {
     }
 
     func testTimeDisplayClampsNegativeElapsedTime() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.elapsedTime = -1
         info.duration = -1
 
@@ -97,7 +96,7 @@ final class TrackInfoTests: XCTestCase {
     }
 
     func testTimeDisplayIsEmptyWithoutElapsedTime() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.elapsedTime = nil
         info.duration = 120
 
@@ -105,7 +104,7 @@ final class TrackInfoTests: XCTestCase {
     }
 
     func testTimeDisplayIsEmptyWithoutDuration() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.elapsedTime = 20
         info.duration = nil
 
@@ -113,7 +112,7 @@ final class TrackInfoTests: XCTestCase {
     }
 
     func testRemainingTimeClampsAtZero() {
-        var info = TrackInfo.idle
+        var info = trackInfo()
         info.elapsedTime = 250
         info.duration = 200
 
@@ -121,16 +120,22 @@ final class TrackInfoTests: XCTestCase {
         XCTAssertEqual(info.timeDisplay, "4:10 / -0:00")
     }
 
-    func testCanControlPlaybackCases() {
-        XCTAssertTrue(trackInfo(playbackState: .playing).canControlPlayback)
-        XCTAssertTrue(trackInfo(playbackState: .paused).canControlPlayback)
-        XCTAssertTrue(trackInfo(playbackState: .stopped).canControlPlayback)
-        XCTAssertFalse(trackInfo(playbackState: .notRunning).canControlPlayback)
-        XCTAssertFalse(trackInfo(playbackState: .permissionDenied).canControlPlayback)
-        XCTAssertFalse(trackInfo(playbackState: .error).canControlPlayback)
+    func testPlaybackStateDisplayNames() {
+        XCTAssertEqual(PlaybackState.playing.displayName, "Playing")
+        XCTAssertEqual(PlaybackState.paused.displayName, "Paused")
+        XCTAssertEqual(PlaybackState.stopped.displayName, "Stopped")
     }
 
-    private func trackInfo(playbackState: PlaybackState) -> TrackInfo {
+    func testUnavailableReasonMessages() {
+        XCTAssertEqual(UnavailableReason.notRunning.message, "Open Music and start playback.")
+        XCTAssertEqual(
+            UnavailableReason.permissionDenied.message,
+            "Allow NowPlayingBar to control Music in System Settings > Privacy & Security > Automation."
+        )
+        XCTAssertEqual(UnavailableReason.error("Custom error").message, "Custom error")
+    }
+
+    private func trackInfo(playbackState: PlaybackState = .playing) -> TrackInfo {
         TrackInfo(
             playbackState: playbackState,
             persistentID: "",
@@ -139,8 +144,7 @@ final class TrackInfoTests: XCTestCase {
             album: "",
             artworkData: nil,
             elapsedTime: nil,
-            duration: nil,
-            message: nil
+            duration: nil
         )
     }
 }

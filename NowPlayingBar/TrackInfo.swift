@@ -4,9 +4,6 @@ enum PlaybackState: String, Equatable {
     case playing
     case paused
     case stopped
-    case notRunning
-    case permissionDenied
-    case error
 
     var displayName: String {
         switch self {
@@ -16,12 +13,6 @@ enum PlaybackState: String, Equatable {
             return "Paused"
         case .stopped:
             return "Stopped"
-        case .notRunning:
-            return "Music is not running"
-        case .permissionDenied:
-            return "Music access is not allowed"
-        case .error:
-            return "Unable to read Music"
         }
     }
 }
@@ -35,19 +26,6 @@ struct TrackInfo: Equatable {
     var artworkData: Data?
     var elapsedTime: TimeInterval?
     var duration: TimeInterval?
-    var message: String?
-
-    static let idle = TrackInfo(
-        playbackState: .notRunning,
-        persistentID: "",
-        name: "",
-        artist: "",
-        album: "",
-        artworkData: nil,
-        elapsedTime: nil,
-        duration: nil,
-        message: "Open Music and start playback."
-    )
 
     var hasTrack: Bool {
         !name.isEmpty || !artist.isEmpty || !album.isEmpty
@@ -75,7 +53,7 @@ struct TrackInfo: Equatable {
 
     var detailSubtitle: String {
         if artist.isEmpty && album.isEmpty {
-            return message ?? playbackState.displayName
+            return playbackState.displayName
         }
 
         if artist.isEmpty {
@@ -103,15 +81,6 @@ struct TrackInfo: Equatable {
         }
 
         return "\(Self.formatTime(elapsedTime)) / -\(Self.formatTime(remainingTime))"
-    }
-
-    var canControlPlayback: Bool {
-        switch playbackState {
-        case .playing, .paused, .stopped:
-            return true
-        case .notRunning, .permissionDenied, .error:
-            return false
-        }
     }
 
     private static func formatTime(_ timeInterval: TimeInterval) -> String {

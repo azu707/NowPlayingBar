@@ -1,5 +1,5 @@
 protocol NowPlayingProviding: AnyObject, Sendable {
-    func fetchNowPlaying() async -> TrackInfo
+    func fetchNowPlaying() async -> NowPlaying
     func togglePlayPause() async
     func nextTrack() async
     func previousTrack() async

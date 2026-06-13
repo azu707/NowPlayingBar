@@ -20,7 +20,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
     private let popover = NSPopover()
     private let popoverViewController: NowPlayingPopoverViewController
     private var timer: Timer?
-    private var currentTrack = TrackInfo.idle
+    private var current = NowPlaying.unavailable(.notRunning)
     private var refreshGeneration = 0
 
     init(provider: NowPlayingProviding) {
@@ -145,39 +145,50 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
                 return
             }
 
-            let nextTrack = await self.provider.fetchNowPlaying()
+            let next = await self.provider.fetchNowPlaying()
 
             guard generation == self.refreshGeneration else {
                 return
             }
 
-            self.apply(nextTrack, force: force)
+            self.apply(next, force: force)
         }
     }
 
-    private func apply(_ nextTrack: TrackInfo, force: Bool) {
-        guard force || nextTrack != currentTrack else {
+    private func apply(_ next: NowPlaying, force: Bool) {
+        guard force || next != current else {
             return
         }
 
-        currentTrack = nextTrack
-        updateStatusItem(with: nextTrack)
-        popoverViewController.update(with: nextTrack)
+        current = next
+        updateStatusItem(with: next)
+        popoverViewController.update(with: next)
     }
 
-    private func updateStatusItem(with trackInfo: TrackInfo) {
+    private func updateStatusItem(with nowPlaying: NowPlaying) {
         guard let button = statusItem.button else {
             return
         }
 
-        let title = truncate(trackInfo.menuBarTitle, maxLength: Metrics.menuBarTitleMaxLength)
-        button.title = title
+        let title: String
+        let toolTip: String
 
-        if title.isEmpty {
-            button.toolTip = trackInfo.message ?? trackInfo.playbackState.displayName
-        } else {
-            button.toolTip = trackInfo.menuBarTitle
+        switch nowPlaying {
+        case .active(let trackInfo):
+            title = truncate(trackInfo.menuBarTitle, maxLength: Metrics.menuBarTitleMaxLength)
+
+            if title.isEmpty {
+                toolTip = trackInfo.playbackState.displayName
+            } else {
+                toolTip = trackInfo.menuBarTitle
+            }
+        case .unavailable(let reason):
+            title = ""
+            toolTip = reason.message
         }
+
+        button.title = title
+        button.toolTip = toolTip
     }
 
     private func truncate(_ value: String, maxLength: Int) -> String {

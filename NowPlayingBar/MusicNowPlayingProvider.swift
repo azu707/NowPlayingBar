@@ -33,7 +33,7 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
     private var commandScripts: [String: NSAppleScript] = [:]
     private var cachedArtwork: (persistentID: String, data: Data?)?
 
-    func fetchNowPlaying() async -> TrackInfo {
+    func fetchNowPlaying() async -> NowPlaying {
         await withCheckedContinuation { continuation in
             scriptQueue.async {
                 continuation.resume(returning: self.fetchNowPlayingSync())
@@ -53,21 +53,13 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
         await executeMusicCommandAsync("previous track")
     }
 
-    private func fetchNowPlayingSync() -> TrackInfo {
+    private func fetchNowPlayingSync() -> NowPlaying {
         guard isMusicRunning else {
-            return .idle
+            return .unavailable(.notRunning)
         }
 
         guard let script = statusScript else {
-            return TrackInfo(
-                playbackState: .error,
-                persistentID: "",
-                name: "",
-                artist: "",
-                album: "",
-                artworkData: nil,
-                message: "Could not create the Music query script."
-            )
+            return .unavailable(.error("Could not create the Music query script."))
         }
 
         var errorInfo: NSDictionary?
@@ -77,13 +69,14 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
             return trackInfo(fromAppleScriptError: errorInfo)
         }
 
-        var trackInfo = trackInfo(from: descriptor)
+        var nowPlaying = trackInfo(from: descriptor)
 
-        if !trackInfo.persistentID.isEmpty {
+        if case .active(var trackInfo) = nowPlaying, !trackInfo.persistentID.isEmpty {
             trackInfo.artworkData = artworkData(for: trackInfo.persistentID)
+            nowPlaying = .active(trackInfo)
         }
 
-        return trackInfo
+        return nowPlaying
     }
 
     private func executeMusicCommandAsync(_ command: String) async {
@@ -99,7 +92,7 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
         !NSRunningApplication.runningApplications(withBundleIdentifier: musicBundleIdentifier).isEmpty
     }
 
-    private func trackInfo(from descriptor: NSAppleEventDescriptor) -> TrackInfo {
+    private func trackInfo(from descriptor: NSAppleEventDescriptor) -> NowPlaying {
         let stateText = descriptor.string(at: .state)
         let persistentID = descriptor.string(at: ReplyField.persistentID)
         let name = descriptor.string(at: .name)
@@ -108,9 +101,12 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
         let elapsedTime = descriptor.optionalDouble(at: .elapsed)
         let duration = descriptor.optionalDouble(at: .duration)
         let message = descriptor.string(at: .message)
-        let state = PlaybackState(rawValue: stateText) ?? .error
 
-        return TrackInfo(
+        guard let state = PlaybackState(rawValue: stateText) else {
+            return unavailable(stateText: stateText, message: message)
+        }
+
+        return .active(TrackInfo(
             playbackState: state,
             persistentID: persistentID,
             name: name,
@@ -118,9 +114,8 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
             album: album,
             artworkData: nil,
             elapsedTime: elapsedTime,
-            duration: duration,
-            message: message.isEmpty ? nil : message
-        )
+            duration: duration
+        ))
     }
 
     private func artworkData(for persistentID: String) -> Data? {
@@ -156,35 +151,24 @@ final class MusicNowPlayingProvider: @unchecked Sendable {
         )
     }
 
-    private func trackInfo(fromAppleScriptError errorInfo: NSDictionary) -> TrackInfo {
+    private func trackInfo(fromAppleScriptError errorInfo: NSDictionary) -> NowPlaying {
         let code = (errorInfo[NSAppleScript.errorNumber] as? NSNumber)?.intValue
         let message = errorInfo[NSAppleScript.errorMessage] as? String
 
         if code == -1743 {
-            return TrackInfo(
-                playbackState: .permissionDenied,
-                persistentID: "",
-                name: "",
-                artist: "",
-                album: "",
-                artworkData: nil,
-                elapsedTime: nil,
-                duration: nil,
-                message: "Allow NowPlayingBar to control Music in System Settings > Privacy & Security > Automation."
-            )
+            return .unavailable(.permissionDenied)
         }
 
-        return TrackInfo(
-            playbackState: .error,
-            persistentID: "",
-            name: "",
-            artist: "",
-            album: "",
-            artworkData: nil,
-            elapsedTime: nil,
-            duration: nil,
-            message: message ?? "Music returned an Apple Events error."
-        )
+        return .unavailable(.error(message ?? "Music returned an Apple Events error."))
+    }
+
+    private func unavailable(stateText: String, message: String) -> NowPlaying {
+        if stateText == "permissionDenied" {
+            return .unavailable(.permissionDenied)
+        }
+
+        let errorMessage = message.isEmpty ? "Music returned an Apple Events error." : message
+        return .unavailable(.error(errorMessage))
     }
 
     private func executeMusicCommand(_ command: String) -> Bool {
