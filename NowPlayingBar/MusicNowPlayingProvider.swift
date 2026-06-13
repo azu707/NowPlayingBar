@@ -136,7 +136,7 @@ final class MusicNowPlayingProvider {
         } else {
             let scriptSource = """
             try
-                tell application "/System/Applications/Music.app"
+                tell application id "\(musicBundleIdentifier)"
                     \(command)
                 end tell
                 return "ok"
@@ -172,7 +172,7 @@ final class MusicNowPlayingProvider {
         end maybeText
 
         try
-            tell application "/System/Applications/Music.app"
+            tell application id "\(musicBundleIdentifier)"
                 set stateText to player state as text
 
                 if stateText is "stopped" then
