@@ -27,15 +27,24 @@ final class NowPlayingPopoverViewController: NSViewController {
 
         configureSubviews()
         buildLayout()
-        update(with: .idle)
+        update(with: .unavailable(.notRunning))
     }
 
-    func update(with trackInfo: TrackInfo) {
+    func update(with nowPlaying: NowPlaying) {
+        switch nowPlaying {
+        case .active(let trackInfo):
+            updateActiveTrack(trackInfo)
+        case .unavailable(let reason):
+            updateUnavailable(reason)
+        }
+    }
+
+    private func updateActiveTrack(_ trackInfo: TrackInfo) {
         titleLabel.stringValue = trackInfo.detailTitle
         subtitleLabel.stringValue = trackInfo.detailSubtitle
         timeLabel.stringValue = trackInfo.timeDisplay
-        stateLabel.stringValue = trackInfo.message ?? trackInfo.playbackState.displayName
-        updatePlaybackButtons(with: trackInfo)
+        stateLabel.stringValue = trackInfo.playbackState.displayName
+        updatePlaybackButtons(playbackState: trackInfo.playbackState, isEnabled: true)
 
         if let artworkData = trackInfo.artworkData, let image = NSImage(data: artworkData) {
             artworkImageView.image = image
@@ -45,6 +54,18 @@ final class NowPlayingPopoverViewController: NSViewController {
                 accessibilityDescription: "No artwork"
             )
         }
+    }
+
+    private func updateUnavailable(_ reason: UnavailableReason) {
+        titleLabel.stringValue = unavailableTitle(for: reason)
+        subtitleLabel.stringValue = reason.message
+        timeLabel.stringValue = ""
+        stateLabel.stringValue = reason.message
+        updatePlaybackButtons(playbackState: .stopped, isEnabled: false)
+        artworkImageView.image = NSImage(
+            systemSymbolName: "music.note",
+            accessibilityDescription: "No artwork"
+        )
     }
 
     private func configureSubviews() {
@@ -151,18 +172,29 @@ final class NowPlayingPopoverViewController: NSViewController {
         button.action = action
     }
 
-    private func updatePlaybackButtons(with trackInfo: TrackInfo) {
-        previousButton.isEnabled = trackInfo.canControlPlayback
-        playPauseButton.isEnabled = trackInfo.canControlPlayback
-        nextButton.isEnabled = trackInfo.canControlPlayback
+    private func updatePlaybackButtons(playbackState: PlaybackState, isEnabled: Bool) {
+        previousButton.isEnabled = isEnabled
+        playPauseButton.isEnabled = isEnabled
+        nextButton.isEnabled = isEnabled
 
-        let playPauseSymbolName = trackInfo.playbackState == .playing ? "pause.fill" : "play.fill"
-        let accessibilityDescription = trackInfo.playbackState == .playing ? "Pause" : "Play"
+        let playPauseSymbolName = playbackState == .playing ? "pause.fill" : "play.fill"
+        let accessibilityDescription = playbackState == .playing ? "Pause" : "Play"
 
         playPauseButton.image = NSImage(
             systemSymbolName: playPauseSymbolName,
             accessibilityDescription: accessibilityDescription
         )
+    }
+
+    private func unavailableTitle(for reason: UnavailableReason) -> String {
+        switch reason {
+        case .notRunning:
+            return "Music is not running"
+        case .permissionDenied:
+            return "Music access is not allowed"
+        case .error:
+            return "Unable to read Music"
+        }
     }
 
     @objc private func previousButtonClicked(_ sender: NSButton) {

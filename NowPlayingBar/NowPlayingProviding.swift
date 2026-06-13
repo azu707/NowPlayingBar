@@ -1,8 +1,8 @@
-protocol NowPlayingProviding: AnyObject {
-    func fetchNowPlaying() -> TrackInfo
-    @discardableResult func togglePlayPause() -> Bool
-    @discardableResult func nextTrack() -> Bool
-    @discardableResult func previousTrack() -> Bool
+protocol NowPlayingProviding: AnyObject, Sendable {
+    func fetchNowPlaying() async -> NowPlaying
+    func togglePlayPause() async
+    func nextTrack() async
+    func previousTrack() async
 }
 
 extension MusicNowPlayingProvider: NowPlayingProviding {}

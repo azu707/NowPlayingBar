@@ -1,7 +1,7 @@
 import AppKit
 
 enum Metrics {
-    static let pollingInterval: TimeInterval = 2
+    static let popoverRefreshInterval: TimeInterval = 1
     static let menuBarTitleMaxLength = 42
     static let popoverSize = NSSize(width: 300, height: 430)
     static let artworkSide: CGFloat = 224
@@ -14,13 +14,14 @@ enum Metrics {
 }
 
 @MainActor
-final class StatusBarController: NSObject {
+final class StatusBarController: NSObject, NSPopoverDelegate {
     private let statusItem: NSStatusItem
     private let provider: NowPlayingProviding
     private let popover = NSPopover()
     private let popoverViewController: NowPlayingPopoverViewController
     private var timer: Timer?
-    private var currentTrack = TrackInfo.idle
+    private var current = NowPlaying.unavailable(.notRunning)
+    private var refreshGeneration = 0
 
     init(provider: NowPlayingProviding) {
         self.provider = provider
@@ -31,13 +32,14 @@ final class StatusBarController: NSObject {
 
         configureStatusItem()
         configurePopover()
-        startPolling()
+        startObservingMusic()
         refresh(force: true)
     }
 
     func invalidate() {
-        timer?.invalidate()
-        timer = nil
+        stopPopoverRefreshTimer()
+        DistributedNotificationCenter.default().removeObserver(self)
+        NSWorkspace.shared.notificationCenter.removeObserver(self)
         NSStatusBar.system.removeStatusItem(statusItem)
     }
 
@@ -57,24 +59,43 @@ final class StatusBarController: NSObject {
         popover.behavior = .transient
         popover.contentSize = Metrics.popoverSize
         popover.contentViewController = popoverViewController
+        popover.delegate = self
 
         popoverViewController.onRefresh = { [weak self] in
             self?.refresh(force: true)
         }
 
-        popoverViewController.onPreviousTrack = { [weak self] in
-            self?.provider.previousTrack()
-            self?.refresh(force: true)
+        popoverViewController.onPreviousTrack = {
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                await self.provider.previousTrack()
+                self.refresh(force: true)
+            }
         }
 
-        popoverViewController.onTogglePlayPause = { [weak self] in
-            self?.provider.togglePlayPause()
-            self?.refresh(force: true)
+        popoverViewController.onTogglePlayPause = {
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                await self.provider.togglePlayPause()
+                self.refresh(force: true)
+            }
         }
 
-        popoverViewController.onNextTrack = { [weak self] in
-            self?.provider.nextTrack()
-            self?.refresh(force: true)
+        popoverViewController.onNextTrack = {
+            Task { @MainActor [weak self] in
+                guard let self else {
+                    return
+                }
+
+                await self.provider.nextTrack()
+                self.refresh(force: true)
+            }
         }
 
         popoverViewController.onQuit = {
@@ -82,39 +103,92 @@ final class StatusBarController: NSObject {
         }
     }
 
-    private func startPolling() {
-        timer = Timer.scheduledTimer(withTimeInterval: Metrics.pollingInterval, repeats: true) { [weak self] _ in
+    private func startObservingMusic() {
+        DistributedNotificationCenter.default().addObserver(
+            self,
+            selector: #selector(playerInfoDidChange(_:)),
+            name: Notification.Name("com.apple.Music.playerInfo"),
+            object: nil
+        )
+
+        NSWorkspace.shared.notificationCenter.addObserver(
+            self,
+            selector: #selector(workspaceApplicationDidTerminate(_:)),
+            name: NSWorkspace.didTerminateApplicationNotification,
+            object: nil
+        )
+    }
+
+    private func startPopoverRefreshTimer() {
+        guard timer == nil else {
+            return
+        }
+
+        timer = Timer.scheduledTimer(withTimeInterval: Metrics.popoverRefreshInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh(force: false)
             }
         }
     }
 
-    private func refresh(force: Bool) {
-        let nextTrack = provider.fetchNowPlaying()
+    private func stopPopoverRefreshTimer() {
+        timer?.invalidate()
+        timer = nil
+    }
 
-        guard force || nextTrack != currentTrack else {
+    private func refresh(force: Bool) {
+        refreshGeneration += 1
+        let generation = refreshGeneration
+
+        Task { @MainActor [weak self] in
+            guard let self else {
+                return
+            }
+
+            let next = await self.provider.fetchNowPlaying()
+
+            guard generation == self.refreshGeneration else {
+                return
+            }
+
+            self.apply(next, force: force)
+        }
+    }
+
+    private func apply(_ next: NowPlaying, force: Bool) {
+        guard force || next != current else {
             return
         }
 
-        currentTrack = nextTrack
-        updateStatusItem(with: nextTrack)
-        popoverViewController.update(with: nextTrack)
+        current = next
+        updateStatusItem(with: next)
+        popoverViewController.update(with: next)
     }
 
-    private func updateStatusItem(with trackInfo: TrackInfo) {
+    private func updateStatusItem(with nowPlaying: NowPlaying) {
         guard let button = statusItem.button else {
             return
         }
 
-        let title = truncate(trackInfo.menuBarTitle, maxLength: Metrics.menuBarTitleMaxLength)
-        button.title = title
+        let title: String
+        let toolTip: String
 
-        if title.isEmpty {
-            button.toolTip = trackInfo.message ?? trackInfo.playbackState.displayName
-        } else {
-            button.toolTip = trackInfo.menuBarTitle
+        switch nowPlaying {
+        case .active(let trackInfo):
+            title = truncate(trackInfo.menuBarTitle, maxLength: Metrics.menuBarTitleMaxLength)
+
+            if title.isEmpty {
+                toolTip = trackInfo.playbackState.displayName
+            } else {
+                toolTip = trackInfo.menuBarTitle
+            }
+        case .unavailable(let reason):
+            title = ""
+            toolTip = reason.message
         }
+
+        button.title = title
+        button.toolTip = toolTip
     }
 
     private func truncate(_ value: String, maxLength: Int) -> String {
@@ -137,5 +211,26 @@ final class StatusBarController: NSObject {
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
             popover.contentViewController?.view.window?.makeKey()
         }
+    }
+
+    @objc private func playerInfoDidChange(_ note: Notification) {
+        refresh(force: true)
+    }
+
+    @objc private func workspaceApplicationDidTerminate(_ note: Notification) {
+        guard let application = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication,
+              application.bundleIdentifier == "com.apple.Music" else {
+            return
+        }
+
+        refresh(force: true)
+    }
+
+    func popoverWillShow(_ notification: Notification) {
+        startPopoverRefreshTimer()
+    }
+
+    func popoverDidClose(_ notification: Notification) {
+        stopPopoverRefreshTimer()
     }
 }
