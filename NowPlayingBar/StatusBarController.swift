@@ -65,7 +65,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             self?.refresh(force: true)
         }
 
-        popoverViewController.onPreviousTrack = { [weak self] in
+        popoverViewController.onPreviousTrack = {
             Task { @MainActor [weak self] in
                 guard let self else {
                     return
@@ -76,7 +76,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             }
         }
 
-        popoverViewController.onTogglePlayPause = { [weak self] in
+        popoverViewController.onTogglePlayPause = {
             Task { @MainActor [weak self] in
                 guard let self else {
                     return
@@ -87,7 +87,7 @@ final class StatusBarController: NSObject, NSPopoverDelegate {
             }
         }
 
-        popoverViewController.onNextTrack = { [weak self] in
+        popoverViewController.onNextTrack = {
             Task { @MainActor [weak self] in
                 guard let self else {
                     return
